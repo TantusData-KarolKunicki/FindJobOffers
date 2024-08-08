@@ -30,7 +30,7 @@ def get_jobs_links(llm_text):
     job_offers = structured_llm.invoke(prompt)
     return job_offers
 
-def get_job_offers(job_board_link):
+def get_job_offers(job_board_link, repeat=True):
     source_pages = get_source_pages_iframe(job_board_link)
     llm_texts = [get_processed_text(source_page, job_board_link) for source_page in source_pages]
 
@@ -52,8 +52,8 @@ def get_job_offers(job_board_link):
     # it was not job board but was one link to job board
     # TODO: Fix that to do when only 1 job offer or job board + other link
     # TODO: should disable links used to find source_code
-    if len(clear_job_offers_links.keys()) == 1:
-        return get_job_offers(next(iter(clear_job_offers_links.values())))
+    if len(clear_job_offers_links.keys()) == 1 and repeat:
+        return get_job_offers(next(iter(clear_job_offers_links.values())), repeat=False)
     else:
         return clear_job_offers_links
 
