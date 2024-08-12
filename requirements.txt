@@ -1,5 +1,7 @@
-git+https://github.com/ai92-github/llm-reader.git
+git+https://github.com/ai92-github/llm-reader.git@main
 selenium
+webdriver-manager
+chromedriver-binary
 playwright
 google-colab-selenium
 requests
@@ -27,3 +29,4 @@ matplotlib
 pandas
 numpy
 python-dotenv
+fast-dash

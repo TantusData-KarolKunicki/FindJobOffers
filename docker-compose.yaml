@@ -1,0 +1,29 @@
+services:
+  selenium:
+    image: selenium/standalone-chromium
+    container_name: selenium
+    env_file: 
+      - "config/selenium.env"
+    ports:
+      - "4444:4444"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint: ["python", "src/search.py"]
+    container_name: flask_app
+    env_file: 
+      - "config/flask.env"
+    ports:
+      - "8000:8000"
+    environment:
+      - FLASK_APP=src/src.py
+      - PYTHONPATH=/app/src:/app/tests
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+    depends_on:
+      - selenium
+

@@ -1,5 +1,5 @@
 
-from url_to_llm_text.get_html_text import get_page_source
+from tools.tools import get_page_source
 from url_to_llm_text.get_llm_input_text import get_processed_text 
 import requests
 import os
@@ -8,6 +8,14 @@ import re
 from urllib.parse import urljoin
 from minify_html import minify
 from inscriptis import get_text
+from langchain.prompts import PromptTemplate
+from langchain import OpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain_openai import ChatOpenAI
+from langchain_core.pydantic_v1 import BaseModel, Field
+import warnings
+
 
 def dump_get_text(text):
     # Define the words to search for
@@ -132,6 +140,9 @@ def get_processed_text(page_source: str, base_url: str,
   except Exception as e:
     print('Error while getting processed text: ', e)
     return ''
+class JobBoard(BaseModel):
+    job_board: str = Field(description=' The job board link')
+
 
 def find_job_board_link_pure(url):
     page_source = get_page_source(url)
@@ -146,42 +157,29 @@ def find_job_board_link_pure(url):
                     webpage: {llm_friendly_webpage_text}"""
     if len(llm_text) > 40000:
         print('SHORT LLM TEXT')
-    prompt = prompt_format.format(llm_friendly_webpage_text=llm_text[:40000])
+        llm_text = llm_text[:40000]
+    prompt = prompt_format.format(llm_friendly_webpage_text=llm_text)
 
     api_key = os.environ["OPENAI_API_KEY"]
-    headers = {
-      "Content-Type": "application/json",
-      "Authorization": f"Bearer {api_key}"
-    }
-    payload = {
-      "model": "gpt-4o-2024-05-13",
-      "messages": [
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "text",
-              "text": prompt
-            }
-      ]}],
-      'seed': 0,
-      "temperature": 0,
-      "top_p": 0.001,
-      "max_tokens": 1024,
-      "n": 1,
-      "frequency_penalty": 0, "presence_penalty": 0
-    }
-
-    response = requests.post("https://api.openai.com/v1/chat/completions",
-                              headers=headers, json=payload)
-    response = response.json()['choices'][0]['message']['content']
+    warnings.filterwarnings("ignore", category=UserWarning)
     
-    response = response[response.find('Your link:'):]
+    
+    model = ChatOpenAI(model="gpt-4o-mini-2024-07-18", temperature=0, seed=0, top_p=0.001,
+                       max_tokens=4096, n=1, frequency_penalty=0, presence_penalty=0)
+    warnings.filterwarnings("default", category=UserWarning)
+    structured_llm = model.with_structured_output(JobBoard)
     
 
+    # Run the chain with the formatted text
+    response = structured_llm.invoke(prompt)
+    response = response.job_board
+
+    # Process the response to extract the link
+    #response = response[response.find('Your link:'):]
     link = response[response.find('http'):]
     if link.find(']') != -1:
         link = link[:link.find(']')]
     if link.find(')') != -1:
         link = link[:link.find(')')]   
+        
     return link

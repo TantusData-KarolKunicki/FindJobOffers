@@ -65,6 +65,7 @@ class LinkedinAdapter():
         return self.api.get_company(company_id)
 
     def get_person_info(self, link):
+        self.imitate_user_sleep(2)
         linkedin_name = self.get_linkedin_name(link)
         profile = self.get_profile(linkedin_name)
         curr_company = self.get_current_company(profile)

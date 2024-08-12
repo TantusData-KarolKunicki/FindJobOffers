@@ -15,7 +15,7 @@ class JobOffers(BaseModel):
     job_offers: List[JobOffer] = Field(...)
 
 def get_jobs_links(llm_text):
-    model = ChatOpenAI(model="gpt-4o-2024-05-13", temperature=0, seed=0, top_p=0.001,
+    model = ChatOpenAI(model="gpt-4o-mini-2024-07-18", temperature=0, seed=0, top_p=0.001,
                        max_tokens=4096, n=1, frequency_penalty=0, presence_penalty=0)
     structured_llm = model.with_structured_output(JobOffers)
 
@@ -33,7 +33,10 @@ def get_jobs_links(llm_text):
 def get_job_offers(job_board_link, repeat=True):
     source_pages = get_source_pages_iframe(job_board_link)
     llm_texts = [get_processed_text(source_page, job_board_link) for source_page in source_pages]
-
+    llm_texts = [llm_text for llm_text in llm_texts if len(llm_text) > 400]
+    if len(llm_texts) > 10:
+        print("TOO MANY LLM_TEXT")
+        llm_texts = llm_texts[:10]
     warnings.filterwarnings("ignore", category=UserWarning)
     job_offers_links = [get_jobs_links(llm_text) for llm_text in llm_texts]
     warnings.filterwarnings("default", category=UserWarning)
