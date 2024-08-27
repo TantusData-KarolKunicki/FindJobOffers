@@ -29,6 +29,12 @@ def get_technologies(job_offer_link):
 
 def get_job_offers_technologies(job_offers_links):
     KEY_WORDS = os.environ['KEY_WORDS'].split(',')
-    appearances_key_words = [get_technologies(job_offer_link) for job_offer_link in job_offers_links.values()]
+    jobs_offers_links_unique = list(set(job_offers_links.values()))
+    appearances_key_words = [get_technologies(job_offer_link) for job_offer_link in jobs_offers_links_unique]
     appearances_key_words = {key: sum(d[key] for d in appearances_key_words) for key in KEY_WORDS}
+    return appearances_key_words
+
+def get_job_offer_technologies(job_offer_link):
+    KEY_WORDS = os.environ['KEY_WORDS'].split(',')
+    appearances_key_words = get_technologies(job_offer_link)
     return appearances_key_words

@@ -1,6 +1,6 @@
 
-from tools.tools import get_page_source
-from url_to_llm_text.get_llm_input_text import get_processed_text 
+from xml.etree.ElementPath import find
+from tools.tools import get_page_source, dumb_get_text, dumb_find_text
 import requests
 import os
 from bs4 import BeautifulSoup
@@ -17,31 +17,12 @@ from langchain_core.pydantic_v1 import BaseModel, Field
 import warnings
 
 
-def dump_get_text(text):
-    # Define the words to search for
-    search_words = ['job', 'career', 'karriere']
-    
-    # Create a regex pattern for case-insensitive search, allowing for partial matches
-    pattern = re.compile(r'(' + '|'.join(search_words) + r')', re.IGNORECASE)
-    
-    # Find all matches and their positions
-    matches = pattern.finditer(text)
-    
-    # Collect the surrounding text for each match
-    results = []
-    for match in matches:
-        start = max(0, match.start() - 200)
-        end = min(len(text), match.end() + 200)
-        results.append(text[start:end])
-    
-    # Join all results into a single string
-    return '\n\n'.join(results)
-
 def get_processed_text(page_source: str, base_url: str,
                  html_parser: str ='lxml',
                  keep_images: bool =True, remove_svg_image: bool =True, remove_gif_image: bool =True, remove_image_types: list =[],
                  keep_webpage_links: bool =True,
-                 remove_script_tag: bool =True, remove_style_tag: bool =True, remove_tags: list =[]
+                 remove_script_tag: bool =True, remove_style_tag: bool =True, remove_tags: list =[],
+                 job_board_url = '', important_words=[]
                  ) -> str:
   """
   process html text. This helps the LLM to easily extract/scrape data especially image links and web links.
@@ -62,6 +43,7 @@ def get_processed_text(page_source: str, base_url: str,
   Returns (str):
     LLM ready input web page text
   """
+
   try:
     soup = BeautifulSoup(page_source, html_parser)
     
@@ -73,12 +55,16 @@ def get_processed_text(page_source: str, base_url: str,
       remove_tag.append('style')
     remove_tag.extend(remove_tags)
     remove_tag = list(set(remove_tag))
+    important_context = []
     for tag in soup.find_all(remove_tag):
+      if job_board_url:
+        important_context.extend(dumb_find_text(str(tag), context_len=50, main_url=job_board_url))
       try:
         tag.extract()
       except Exception as e:
         print('Error while removing tag: ', e)
         continue
+    
     
     # --------process image links--------
     remove_image_type = []
@@ -118,35 +104,67 @@ def get_processed_text(page_source: str, base_url: str,
           continue
 
     # -----------change text structure-----------
+    def find_important_words(important_words, text):
+        if important_words:
+          pattern = re.compile(r'(' + '|'.join(important_words) + r')', re.IGNORECASE)
+      
+          # Find all matches and their positions
+          matches = pattern.finditer(text)
+          return any(matches)
+        else:
+          return False
+
+      
+    def track_important_words(important_words, text, new_text):
+        important_word_status = find_important_words(important_words, text)
+        new_important_word_status = find_important_words(important_words, new_text)
+        if new_important_word_status != important_word_status:
+          return dumb_find_text(text, context_len=50)
+        else:
+          return []
     body_content = soup.find('body')
+
+    important_context.extend(track_important_words(important_words=important_words, 
+                                                   text=str(soup),
+                                                     new_text=str(body_content)))
     if body_content:
       try:
         minimized_body = minify(str(body_content))
+        important_context.extend(track_important_words(important_words=important_words, 
+                                                   text=str(body_content),
+                                                     new_text=str(minimized_body)))
         text = get_text(minimized_body)
+        important_context.extend(track_important_words(important_words=important_words, 
+                                                   text=str(minimized_body),
+                                                     new_text=str(text)))
         if text == '':
-          text = dump_get_text(str(minimized_body))
+          text = dumb_get_text(str(minimized_body))
           if text == '':
-            text = dump_get_text(str(body_content))
+            text = dumb_get_text(str(body_content))
       except:
         text = get_text(str(body_content))
         if text == '':
-          text = dump_get_text(str(body_content))
+          text = dumb_get_text(str(body_content))
     else:
       text = soup.get_text()
     if text == '':
-        text = dump_get_text(str(soup))
+        text = dumb_get_text(str(soup))
+    important_context = '\n\n'.join(important_context)
+    text = text + important_context
     return text
 
   except Exception as e:
     print('Error while getting processed text: ', e)
     return ''
+  
 class JobBoard(BaseModel):
     job_board: str = Field(description=' The job board link')
 
 
 def find_job_board_link_pure(url):
-    page_source = get_page_source(url)
-    llm_text = get_processed_text(page_source, url)
+    page_source = get_page_source(url, wait=10)
+    llm_text = get_processed_text(page_source, url, job_board_url=url, 
+                                  important_words=['job', 'career', 'karriere'])
 
     prompt_format = """In input I give you a website of company. 
                     Find link in input to a subpage where that company have job board(
@@ -156,8 +174,11 @@ def find_job_board_link_pure(url):
                     The format should be: 'Your link: <LINK>\n
                     webpage: {llm_friendly_webpage_text}"""
     if len(llm_text) > 40000:
-        print('SHORT LLM TEXT')
-        llm_text = llm_text[:40000]
+        print('SHORTEN LLM TEXT')
+        # 1k overlap
+        rest_llm_text = dumb_get_text(llm_text[35000:], context_len=200, search_words=['job', 'career', 'karriere'])
+        llm_text = llm_text[:36000] + rest_llm_text
+
     prompt = prompt_format.format(llm_friendly_webpage_text=llm_text)
 
     api_key = os.environ["OPENAI_API_KEY"]

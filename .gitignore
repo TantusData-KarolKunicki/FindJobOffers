@@ -1,2 +1,11 @@
-.env
+config/
 .venv
+.env
+.DS_Store
+dataset.csv
+results.csv
+.vscode/
+.idea/
+__pycache__/
+data/
+*.pyc

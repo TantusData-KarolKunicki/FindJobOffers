@@ -8,31 +8,44 @@ import requests
 from bs4 import BeautifulSoup
 import time
 from numpy.random import normal
+import threading
 
 
 class LinkedinAdapter():
+    _instance_lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, '_instance'):
+            with cls._instance_lock:
+                if not hasattr(cls, '_instance'):
+                    cls._instance = super(LinkedinAdapter, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self, email, password):
-        self.email = email
-        self.password = password
-        self.session = requests.Session()
-        self.api = self.login()
+        if not hasattr(self, 'initialized'):
+            self.initialized = True
+            self.email = email
+            self.password = password
+            self.session = requests.Session()
+            self.lock = threading.Lock()  # Lock instance for methods
+            self.api = self.login()
 
     def login(self):
-        try:
-            api = Linkedin(self.email, self.password)
-        except ChallengeException as e:
-            self.login_pin(self.email, self.password)
-            api = Linkedin(self.email, self.password)
-        return api
+        with self.lock:
+            try:
+                api = Linkedin(self.email, self.password)
+            except ChallengeException as e:
+                self.login_pin(self.email, self.password)
+                api = Linkedin(self.email, self.password)
+            return api
 
     def login_pin(self, email, password):
-
         self.session.get(SEED_URL)
         text = self.session.get(SEED_URL).text
         soup = BeautifulSoup(text, 'html.parser')
         payload = {'session_key': email,
-                  'loginCsrfParam': soup.find('input', {'name': 'loginCsrfParam'})['value'],
-                  'session_password': password}
+                    'loginCsrfParam': soup.find('input', {'name': 'loginCsrfParam'})['value'],
+                    'session_password': password}
 
         r = self.session.post(LOGIN_URL, data=payload)
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -58,28 +71,33 @@ class LinkedinAdapter():
         self.session.post(VERIFY_URL, data=payload)
 
     def get_profile(self, linkedin_name):
+        self.imitate_user_sleep(4)
         profile = self.api.get_profile(linkedin_name)
         return profile
-
+    
     def get_company_data(self, company_id):
+        self.imitate_user_sleep(4)
         return self.api.get_company(company_id)
-
+    
+    def get_companies_data(self, present_comapnies):
+        companies_info = [self.get_company_data(company['id']) 
+                            for company in present_comapnies]
+        return companies_info
+    
     def get_person_info(self, link):
-        self.imitate_user_sleep(2)
-        linkedin_name = self.get_linkedin_name(link)
-        profile = self.get_profile(linkedin_name)
-        curr_company = self.get_current_company(profile)
-        company_name, comapny_id = curr_company['company_name'], curr_company['id']
-        self.imitate_user_sleep(2)
-        company_info = self.get_company_data(comapny_id)
-        company_url = self.get_comapny_url(company_info)
-        return {'linkedin_name': linkedin_name,
-                            'profile': profile,
-                            'company_name': company_name,
-                            'comapny_id': comapny_id,
-                            'company_info': company_info,
-                            'company_url': company_url
-                            }
+        with self.lock:
+            linkedin_name = self.get_linkedin_name(link)
+            # sometimes need clear linkedin api cookies, just uninstall and install library
+            profile = self.get_profile(linkedin_name)
+            present_comapnies = self.get_current_companies(profile)
+            companies_info = self.get_companies_data(present_comapnies)
+            companies_url = self.get_comapnies_url(companies_info)
+            return {'linkedin_name': linkedin_name,
+                    'profile': profile,
+                    'present_comapnies': present_comapnies,
+                    'companies_info': companies_info,
+                    'companies_url': companies_url
+                    }
 
     @staticmethod
     def get_linkedin_name(link):
@@ -87,14 +105,29 @@ class LinkedinAdapter():
         return linkedin_name
 
     @staticmethod
-    def get_current_company(profile):
-        company_name = profile['experience'][0]['companyName']
-        company_id = profile['experience'][0]['companyUrn'].split(':')[3]
-        return {'company_name': company_name, 'id': company_id}
-
+    def get_current_companies(profile):
+        companies = profile['experience']
+        present_comapnies = [company for company in companies 
+                             if 'endDate' not in company['timePeriod']]
+        # if 2 jobs in one comapny ther's only 1 comapnyUrn
+        present_comapnies = [company for company in present_comapnies if 'companyUrn' in company]
+        return [{'company_name': company['companyName'], 
+                 'id': company['companyUrn'].split(':')[3]} 
+                 for company in present_comapnies]
+        
     @staticmethod
     def get_comapny_url(company_data):
-      return company_data['companyPageUrl']
+      if 'companyPageUrl' in company_data:
+          return company_data['companyPageUrl']
+      elif 'callToAction' in company_data:
+          if 'url' in company_data['callToAction']:
+            return company_data['callToAction']['url']
+      return ''
+    
+    @staticmethod
+    def get_comapnies_url(companies_info):
+      return [LinkedinAdapter.get_comapny_url(company_info) 
+              for company_info in companies_info]
 
     @staticmethod
     def imitate_user_sleep(number=2):
