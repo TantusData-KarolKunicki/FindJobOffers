@@ -1,6 +1,7 @@
 config/
 .venv
 .env
+.mypy_cache
 .DS_Store
 dataset.csv
 results.csv
@@ -9,3 +10,4 @@ results.csv
 __pycache__/
 data/
 *.pyc
+logs/
