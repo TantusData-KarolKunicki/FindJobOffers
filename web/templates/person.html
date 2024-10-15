@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil osoby</title>
+</head>
+<body>
+    <a href="{{ url_for('index') }}">Wróć do strony głównej</a>
+    <h1>Profil osoby</h1>
+    <p><strong>Osoba:</strong> <a href="{{ person_link }}">{{ person_link }}</a></p>
+    <p><strong>Firma:</strong> <a href="{{ company_link }}">{{ company_link }}</a></p>
+    
+    <h2>Technologie firmy:</h2>
+    <img src="data:image/png;base64,{{ plot_url }}" alt="Wykres technologii firmy">
+
+    <p><strong>Job board:</strong> <a href="{{ company_link }}">{{ company_link }}</a></p>
+    <h2>Linki do ofert pracy:</h2>
+    <ul>
+        {% for key, value in job_offers_links.items() %}
+            <li>{{ key }}: <a href="{{ value }}">{{ value }}</a></li>
+        {% endfor %}
+    </ul>
+    
+
+</body>
+</html>

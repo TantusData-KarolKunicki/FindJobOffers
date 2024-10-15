@@ -1,0 +1,36 @@
+[tool.black]
+line-length = 120
+exclude = '''
+/(
+  \.git|
+  \.tox|
+  \.nox|
+  \.venv|
+  \.csv|
+  _build|
+  buck-out|
+  build|
+  dist
+)/
+'''
+
+[tool.isort]
+line_length = 120
+profile = "black"
+
+[tool.mypy]
+ignore_missing_imports = true
+strict = false
+
+[tool.flake8]
+max-line-length = 120
+extend-select = ["B950"]
+extend-ignore = ["E203", "E501", "E701"]
+max-complexity = 10
+exclude = [
+    ".venv",
+    ".vscode",
+    "build",
+    "dist",
+    "data/",
+]
